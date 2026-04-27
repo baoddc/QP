@@ -196,7 +196,7 @@ async function handleAttendance(action) {
         });
         lat = position.coords.latitude;
         lng = position.coords.longitude;
-        accuracy = position.coords.accuracy;
+        accuracy = position.coords.accuracy || 0;
 
         // Geofencing Check
         const settings = JSON.parse(localStorage.getItem('attendanceSettings')) || {};
@@ -204,12 +204,17 @@ async function handleAttendance(action) {
         const companyLng = parseDMSToDecimal(settings.companyLng);
         const allowedRadius = parseFloat(settings.companyRadius) || 200;
         
+        console.log(`Location: ${lat},${lng} (accuracy: ${accuracy}m)`);
+        console.log(`Company: ${companyLat},${companyLng} (radius: ${allowedRadius}m)`);
+
         let distanceInfo = '';
 
         if (companyLat !== null && companyLng !== null) {
             const rawDistance = getDistance(lat, lng, companyLat, companyLng);
             const distance = Math.max(0, rawDistance - accuracy);
             
+            console.log(`Calculated distance: ${rawDistance}m, Adjusted: ${distance}m`);
+
             // Safety check: If distance calculation fails or is invalid
             if (isNaN(distance)) {
                 alert('Lỗi: Không thể tính toán khoảng cách. Vui lòng kiểm tra tọa độ cài đặt!');
@@ -593,16 +598,26 @@ function toDMS(coord, isLat) {
  * Calculates distance between two points in meters using Haversine formula
  */
 function getDistance(lat1, lon1, lat2, lon2) {
+    // Ensure inputs are numbers
+    const p1 = parseFloat(lat1);
+    const p2 = parseFloat(lon1);
+    const p3 = parseFloat(lat2);
+    const p4 = parseFloat(lon2);
+
+    if (isNaN(p1) || isNaN(p2) || isNaN(p3) || isNaN(p4)) return NaN;
+
     const R = 6378137; // Earth radius in meters (WGS84 standard)
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
-    const Δφ = (lat2 - lat1) * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
+    const φ1 = p1 * Math.PI / 180;
+    const φ2 = p3 * Math.PI / 180;
+    const Δφ = (p3 - p1) * Math.PI / 180;
+    const Δλ = (p4 - p2) * Math.PI / 180;
 
     const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
               Math.cos(φ1) * Math.cos(φ2) *
               Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    
+    // Safety clamp for floating point errors (a can be slightly > 1)
+    const c = 2 * Math.atan2(Math.sqrt(Math.max(0, Math.min(1, a))), Math.sqrt(Math.max(0, 1 - a)));
 
     return R * c; // in meters
 }
@@ -614,24 +629,38 @@ function getDistance(lat1, lon1, lat2, lon2) {
  * Parses DMS coordinate string (e.g., 10°49'12.7"N) back to Decimal Degrees
  */
 function parseDMSToDecimal(dms) {
-    if (!dms) return null;
+    if (dms === null || dms === undefined || dms === '') return null;
     if (typeof dms === 'number') return dms;
     
-    // Convert comma to dot for Vietnamese locale support
-    const str = dms.toString().trim().replace(',', '.');
-    
+    // Clean string and handle common variations
+    let str = dms.toString().trim()
+        .replace(',', '.') // Vietnamese locale comma
+        .replace(/[′’]/g, "'") // Prime symbols
+        .replace(/[″”]/g, '"') // Double prime symbols
+        .replace(/[°dD]/g, '°'); // Degree symbols
+
     // If it's already a decimal string, parse it
     if (!isNaN(parseFloat(str)) && !str.includes('°')) {
         return parseFloat(str);
     }
 
     try {
-        // Robust regex to handle spaces and different formats
-        // Matches: 10°45'45.4"N, 10° 45' 45.4" N, etc.
-        const regex = /(\d+)\s*°\s*(\d+)\s*'\s*([\d.]+)\s*"\s*([NSEW])/i;
+        // More flexible regex to handle spaces and different formats
+        // Matches: 10°45'45.4"N, 10 45 45.4 N, 10° 45' 45.4" N, etc.
+        const regex = /(\d+)\s*[°\s]\s*(\d+)\s*['\s]\s*([\d.]+)\s*["\s]\s*([NSEW])/i;
         const parts = str.match(regex);
         
         if (!parts) {
+            // Fallback for simple decimal with direction (e.g., 10.762622N)
+            const fallbackRegex = /([\d.]+)\s*([NSEW])/i;
+            const fallbackParts = str.match(fallbackRegex);
+            if (fallbackParts) {
+                let val = parseFloat(fallbackParts[1]);
+                const dir = fallbackParts[2].toUpperCase();
+                if (dir === 'S' || dir === 'W') val *= -1;
+                return val;
+            }
+
             const val = parseFloat(str);
             return isNaN(val) ? null : val;
         }
