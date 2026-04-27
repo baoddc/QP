@@ -6,6 +6,7 @@ let employees = [];
 let attendanceData = [];
 let currentSection = 'dashboard';
 let map, marker;
+let historyMap, historyMarkers = [];
 
 // DOM Elements
 const sections = document.querySelectorAll('.section');
@@ -25,6 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
     populateTimeSelects();
     setupSettingsForm();
+    setupHistoryMap();
 
     // Check if SCRIPT_URL is set
     if (SCRIPT_URL === 'YOUR_GOOGLE_SCRIPT_WEB_APP_URL') {
@@ -122,6 +124,27 @@ function renderAttendanceTable() {
         const tr = document.createElement('tr');
         const statusClass = record.status === 'Late' ? 'status-out' : 'status-in';
 
+        // Check for coordinates (supporting old and new header names)
+        const lat = record.checkin_lat || record.latitude || record.lat;
+        const lng = record.checkin_lng || record.longitude || record.lng;
+        const outLat = record.checkout_lat;
+        const outLng = record.checkout_lng;
+
+        let locationHtml = '-';
+        if (lat && lng) {
+            locationHtml = `
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" class="status-badge" style="background: rgba(99, 102, 241, 0.1); color: var(--primary); text-decoration: none;" title="Vị trí Check-in">
+                        <i class="fas fa-map-marker-alt"></i> Vào
+                    </a>
+                    ${outLat ? `
+                    <a href="https://www.google.com/maps?q=${outLat},${outLng}" target="_blank" class="status-badge" style="background: rgba(16, 185, 129, 0.1); color: var(--success); text-decoration: none;" title="Vị trí Check-out">
+                        <i class="fas fa-map-marker-alt"></i> Ra
+                    </a>` : ''}
+                </div>
+            `;
+        }
+
         tr.innerHTML = `
             <td>
                 <div style="font-weight: 600; color: #818cf8;">${record.name}</div>
@@ -131,6 +154,7 @@ function renderAttendanceTable() {
             <td>${record.checkin || '--:--'}</td>
             <td>${record.checkout || '--:--'}</td>
             <td><span class="status-badge ${statusClass}">${record.status}</span></td>
+            <td>${locationHtml}</td>
             <td>${record.note || '-'}</td>
         `;
         attendanceList.appendChild(tr);
@@ -162,29 +186,27 @@ async function handleAttendance(action) {
 
     // Geolocation Handling
     let lat = null, lng = null, address = '', accuracy = 0;
-    if (action === 'checkin') {
-        try {
-            const position = await new Promise((resolve, reject) => {
-                navigator.geolocation.getCurrentPosition(resolve, reject, { 
-                    enableHighAccuracy: true, 
-                    timeout: 10000,
-                    maximumAge: 0 
-                });
+    try {
+        const position = await new Promise((resolve, reject) => {
+            navigator.geolocation.getCurrentPosition(resolve, reject, { 
+                enableHighAccuracy: true, 
+                timeout: 10000,
+                maximumAge: 0 
             });
-            lat = position.coords.latitude;
-            lng = position.coords.longitude;
-            accuracy = position.coords.accuracy;
-            
-            try {
-                const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
-                const geoData = await geoRes.json();
-                address = geoData.display_name;
-            } catch (e) { console.error('Address lookup failed', e); }
+        });
+        lat = position.coords.latitude;
+        lng = position.coords.longitude;
+        accuracy = position.coords.accuracy;
+        
+        try {
+            const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+            const geoData = await geoRes.json();
+            address = geoData.display_name;
+        } catch (e) { console.error('Address lookup failed', e); }
 
-        } catch (error) {
-            console.warn('Geolocation failed:', error);
-            showStatus('Không thể lấy vị trí chính xác. Vui lòng bật GPS.', 'warning');
-        }
+    } catch (error) {
+        console.warn('Geolocation failed:', error);
+        showStatus('Không thể lấy vị trí chính xác. Vui lòng bật GPS.', 'warning');
     }
 
     if (SCRIPT_URL === 'YOUR_GOOGLE_SCRIPT_WEB_APP_URL') {
@@ -215,7 +237,7 @@ async function handleAttendance(action) {
 
         if (result.success) {
             showStatus(result.message, 'success');
-            if (lat && lng && action === 'checkin') showMap(lat, lng, accuracy, address);
+            if (lat && lng) showMap(lat, lng, accuracy, address, empName);
             setTimeout(() => loadData(), 1000);
         } else {
             showStatus(result.message, 'warning');
@@ -275,8 +297,9 @@ function showDemoData() {
     ];
 
     attendanceData = [
-        { id: 'NV001', name: 'Nguyễn Văn A', date: '27/04/2024', checkin: '08:00:15', checkout: '17:30:22', status: 'On Time', note: '' },
-        { id: 'NV002', name: 'Trần Thị B', date: '27/04/2024', checkin: '08:45:10', checkout: '18:15:00', status: 'Late', note: 'Kẹt xe' }
+        { id: 'NV001', name: 'Nguyễn Văn A', date: '27/04/2024', checkin: '08:00:15', checkout: '17:30:22', status: 'On Time', note: '', latitude: '10.762622', longitude: '106.660172' },
+        { id: 'NV002', name: 'Trần Thị B', date: '27/04/2024', checkin: '08:45:10', checkout: '18:15:00', status: 'Late', note: 'Kẹt xe', latitude: '10.772622', longitude: '106.670172' },
+        { id: 'NV003', name: 'Lê Văn C', date: '27/04/2024', checkin: '09:00:00', checkout: '', status: 'Late', note: '', latitude: '10.782622', longitude: '106.680172' }
     ];
 
     updateStats({ total: 150, present: 142, late: 8, leave: 5 });
@@ -286,11 +309,12 @@ function showDemoData() {
 
 // Map Logic
 let accuracyCircle;
-function showMap(lat, lng, accuracy, addr) {
+function showMap(lat, lng, accuracy, addr, name) {
     const container = document.getElementById('map-container');
     const info = document.getElementById('location-info');
     container.style.display = 'block';
     info.innerHTML = `
+        <div style="font-weight: 600; color: var(--text-main); margin-bottom: 5px;">Nhân viên: <span style="color: var(--primary);">${name}</span></div>
         <div style="font-weight: 600; color: var(--text-main); margin-bottom: 5px;">Địa chỉ thực tế:</div>
         <div style="margin-bottom: 8px;">${addr || 'Không xác định được địa chỉ'}</div>
         <div style="font-size: 0.75rem; color: ${accuracy > 100 ? 'var(--danger)' : 'var(--success)'};">
@@ -304,10 +328,12 @@ function showMap(lat, lng, accuracy, addr) {
             attribution: '© OpenStreetMap'
         }).addTo(map);
         marker = L.marker([lat, lng]).addTo(map);
+        marker.bindPopup(`<b>${name}</b><br>Đang ở đây`).openPopup();
         accuracyCircle = L.circle([lat, lng], { radius: accuracy, color: '#6366f1', fillOpacity: 0.1 }).addTo(map);
     } else {
         map.setView([lat, lng], 16);
         marker.setLatLng([lat, lng]);
+        marker.setPopupContent(`<b>${name}</b><br>Đang ở đây`).openPopup();
         if (accuracyCircle) map.removeLayer(accuracyCircle);
         accuracyCircle = L.circle([lat, lng], { radius: accuracy, color: '#6366f1', fillOpacity: 0.1 }).addTo(map);
     }
@@ -346,6 +372,56 @@ function populateTimeSelects() {
     
     // Initial load again to set the values after options are created
     loadSettings();
+}
+
+function setupHistoryMap() {
+    const btnViewMap = document.getElementById('btn-view-map');
+    const btnCloseMap = document.getElementById('btn-close-history-map');
+    const container = document.getElementById('history-map-container');
+
+    btnViewMap.addEventListener('click', () => {
+        container.style.display = 'block';
+        renderHistoryMap();
+        // Smooth scroll to map
+        container.scrollIntoView({ behavior: 'smooth' });
+    });
+
+    btnCloseMap.addEventListener('click', () => {
+        container.style.display = 'none';
+    });
+}
+
+function renderHistoryMap() {
+    if (!historyMap) {
+        historyMap = L.map('history-map').setView([10.762622, 106.660172], 12);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }).addTo(historyMap);
+    }
+
+    // Clear existing markers
+    historyMarkers.forEach(m => historyMap.removeLayer(m));
+    historyMarkers = [];
+
+    const bounds = [];
+    attendanceData.forEach(record => {
+        const lat = parseFloat(record.checkin_lat || record.latitude || record.lat);
+        const lng = parseFloat(record.checkin_lng || record.longitude || record.lng);
+        
+        if (!isNaN(lat) && !isNaN(lng)) {
+            const m = L.marker([lat, lng])
+                .bindPopup(`<b>${record.name}</b><br>Giờ vào: ${record.checkin || '-'}<br>Ngày: ${record.date}`)
+                .addTo(historyMap);
+            historyMarkers.push(m);
+            bounds.push([lat, lng]);
+        }
+    });
+
+    if (bounds.length > 0) {
+        historyMap.fitBounds(bounds, { padding: [50, 50] });
+    } else {
+        alert('Không có dữ liệu định vị cho ngày này!');
+    }
 }
 
 function setupSettingsForm() {

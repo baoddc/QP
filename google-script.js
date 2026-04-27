@@ -6,7 +6,7 @@
  * 2. Rename 'Sheet1' to 'Attendance'.
  * 3. Create another sheet named 'Employees'.
  * 4. In 'Employees', add headers: ID, Name, Department, Position.
- * 5. In 'Attendance', add headers: ID, Name, Date, CheckIn, CheckOut, Status, Note, Latitude, Longitude.
+ * 5. In 'Attendance', add headers: ID, Name, Date, CheckIn, CheckOut, Status, Note, CheckIn_Lat, CheckIn_Lng, CheckOut_Lat, CheckOut_Lng.
  * 6. Go to Extensions > Apps Script and paste this code.
  * 7. Deploy as Web App (Execute as: Me, Who has access: Anyone).
  */
@@ -65,7 +65,7 @@ function doGet(e) {
       if (row[2] instanceof Date) {
         date = Utilities.formatDate(row[2], timezone, "dd/MM/yyyy");
       } else {
-        date = row[2]; // Already a string
+        date = row[2].toString(); 
       }
       
       if (date === today) {
@@ -78,7 +78,7 @@ function doGet(e) {
       total: employees > 0 ? employees : 0,
       present: presentIds.size,
       late: lateIds.size,
-      leave: 0 // Placeholder
+      leave: 0 
     });
   }
   
@@ -87,7 +87,7 @@ function doGet(e) {
   }
   
   if (action === 'checkout') {
-    return checkOut(e.parameter.employeeId);
+    return checkOut(e.parameter.employeeId, e.parameter.lat, e.parameter.lng);
   }
 }
 
@@ -96,11 +96,11 @@ function doPost(e) {
   const action = data.action;
   
   if (action === 'checkin') {
-    return checkIn(data.employeeId, data.employeeName, data.configStartTime);
+    return checkIn(data.employeeId, data.employeeName, data.configStartTime, data.lat, data.lng);
   }
   
   if (action === 'checkout') {
-    return checkOut(data.employeeId);
+    return checkOut(data.employeeId, data.lat, data.lng);
   }
 }
 
@@ -110,14 +110,13 @@ function checkIn(id, name, configStartTime, lat, lng) {
   const date = Utilities.formatDate(now, timezone, "dd/MM/yyyy");
   const time = Utilities.formatDate(now, timezone, "HH:mm:ss");
   
-  // Check if there is an open check-in session (check-in without check-out)
   const attendanceData = ATTENDANCE_SHEET.getDataRange().getValues();
   for (let i = attendanceData.length - 1; i >= 1; i--) {
     let rowDate;
     if (attendanceData[i][2] instanceof Date) {
       rowDate = Utilities.formatDate(attendanceData[i][2], timezone, "dd/MM/yyyy");
     } else {
-      rowDate = attendanceData[i][2]; // Already a string
+      rowDate = attendanceData[i][2].toString();
     }
 
     if (attendanceData[i][0] == id && rowDate === date) {
@@ -127,57 +126,54 @@ function checkIn(id, name, configStartTime, lat, lng) {
     }
   }
   
-  // Late detection logic
   let status = 'On Time';
   if (configStartTime) {
-    const [configHour, configMin] = configStartTime.split(':').map(Number);
-    const currentHour = now.getHours();
-    const currentMin = now.getMinutes();
-    
-    if (currentHour > configHour || (currentHour === configHour && currentMin > configMin)) {
-      status = 'Late';
-    }
-  } else {
-    // Default fallback
-    if (now.getHours() >= 8 && now.getMinutes() > 30) status = 'Late';
+    const [h, m] = configStartTime.split(':');
+    const startLimit = new Date(now.getTime());
+    startLimit.setHours(parseInt(h), parseInt(m), 0);
+    if (now > startLimit) status = 'Late';
   }
   
+  // Columns: A:ID, B:Name, C:Date, D:CheckIn, E:CheckOut, F:Status, G:Note, H:Lat, I:Lng
   ATTENDANCE_SHEET.appendRow([id, name, date, time, '', status, '', lat || '', lng || '']);
   
-  // Force 24h format on the newly added time cell
   const lastRow = ATTENDANCE_SHEET.getLastRow();
   ATTENDANCE_SHEET.getRange(lastRow, 4).setNumberFormat('HH:mm:ss');
   
   return contentResponse({ success: true, message: 'Check-in thành công!' });
 }
 
-function checkOut(id) {
+function checkOut(id, lat, lng) {
   const now = new Date();
   const timezone = SS.getSpreadsheetTimeZone();
   const date = Utilities.formatDate(now, timezone, "dd/MM/yyyy");
   const time = Utilities.formatDate(now, timezone, "HH:mm:ss");
   
   const attendanceData = ATTENDANCE_SHEET.getDataRange().getValues();
-  // Search from bottom to top to find the latest open check-in
   for (let i = attendanceData.length - 1; i >= 1; i--) {
     let rowDate;
     if (attendanceData[i][2] instanceof Date) {
       rowDate = Utilities.formatDate(attendanceData[i][2], timezone, "dd/MM/yyyy");
     } else {
-      rowDate = attendanceData[i][2]; // Already a string
+      rowDate = attendanceData[i][2].toString();
     }
 
     if (attendanceData[i][0] == id && rowDate === date) {
       if (attendanceData[i][4] === '') {
-        const cell = ATTENDANCE_SHEET.getRange(i + 1, 5);
-        cell.setValue(time);
-        cell.setNumberFormat('HH:mm:ss');
+        const checkoutCell = ATTENDANCE_SHEET.getRange(i + 1, 5);
+        checkoutCell.setValue(time);
+        checkoutCell.setNumberFormat('HH:mm:ss');
+        
+        // Update Check-out Coordinates (Columns J:10 and K:11)
+        if (lat) ATTENDANCE_SHEET.getRange(i + 1, 10).setValue(lat);
+        if (lng) ATTENDANCE_SHEET.getRange(i + 1, 11).setValue(lng);
+        
         return contentResponse({ success: true, message: 'Check-out thành công!' });
       }
     }
   }
   
-  return contentResponse({ success: false, message: 'Không tìm thấy bản ghi check-in hôm nay!' });
+  return contentResponse({ success: false, message: 'Không tìm thấy lượt Check-in phù hợp để Check-out!' });
 }
 
 function contentResponse(obj) {

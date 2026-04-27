@@ -138,6 +138,9 @@
                     <h3>Lịch Sử Chấm Công</h3>
                     <div style="display: flex; gap: 1rem;">
                         <input type="date" id="report-date" style="width: auto;">
+                        <button class="btn btn-primary" id="btn-view-map" style="background: var(--warning);">
+                            <i class="fas fa-map-marked-alt"></i> Xem Bản Đồ
+                        </button>
                         <button class="btn btn-primary" id="btn-export">
                             <i class="fas fa-file-export"></i> Xuất Excel
                         </button>
@@ -152,6 +155,7 @@
                                 <th>Giờ vào</th>
                                 <th>Giờ ra</th>
                                 <th>Trạng Thái</th>
+                                <th>Vị trí</th>
                                 <th>Ghi Chú</th>
                             </tr>
                         </thead>
@@ -159,6 +163,14 @@
                             <!-- Data will be loaded here -->
                         </tbody>
                     </table>
+                </div>
+
+                <!-- History Map Container -->
+                <div id="history-map-container" style="display: none; margin-top: 2rem; border-radius: 20px; overflow: hidden; border: 1px solid var(--glass-border); position: relative;">
+                    <div id="history-map" style="height: 500px; width: 100%;"></div>
+                    <button id="btn-close-history-map" style="position: absolute; top: 10px; right: 10px; z-index: 1000; background: var(--danger); color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer;">
+                        <i class="fas fa-times"></i> Đóng bản đồ
+                    </button>
                 </div>
             </div>
         </section>
