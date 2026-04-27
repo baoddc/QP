@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Chấm Công Thông Minh</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+
+<body>
+    <nav class="sidebar">
+        <div class="logo">
+            <div class="logo-icon">AC</div>
+            <h2>Antigravity</h2>
+        </div>
+        <ul class="nav-links">
+            <li class="nav-item">
+                <a href="#" class="nav-link active" data-section="dashboard">
+                    <i class="fas fa-th-large"></i> Dashboard
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#" class="nav-link" data-section="attendance">
+                    <i class="fas fa-clock"></i> Chấm Công
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#" class="nav-link" data-section="reports">
+                    <i class="fas fa-chart-bar"></i> Báo Cáo
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#" class="nav-link" data-section="settings">
+                    <i class="fas fa-cog"></i> Cài Đặt
+                </a>
+            </li>
+        </ul>
+        <div class="nav-footer" style="margin-top: auto; color: var(--text-muted); font-size: 0.8rem;">
+            <p>© 2024 Antigravity Tech</p>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <header>
+            <div>
+                <h1 id="page-title">Tổng Quan Dashboard</h1>
+                <p style="color: var(--text-muted);">Chào mừng trở lại, hôm nay là <span id="current-date"></span></p>
+            </div>
+            <div class="user-profile">
+                <div class="avatar"><i class="fas fa-user"></i></div>
+                <span>Admin User</span>
+            </div>
+        </header>
+
+        <!-- Dashboard Section -->
+        <section id="dashboard" class="section active animate-fade-in">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(99, 102, 241, 0.1); color: var(--primary);">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="stat-value" id="stat-total">0</div>
+                    <div class="stat-label">Tổng Nhân Viên</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(16, 185, 129, 0.1); color: var(--success);">
+                        <i class="fas fa-user-check"></i>
+                    </div>
+                    <div class="stat-value" id="stat-present">0</div>
+                    <div class="stat-label">Đã Có Mặt</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(239, 68, 68, 0.1); color: var(--danger);">
+                        <i class="fas fa-user-clock"></i>
+                    </div>
+                    <div class="stat-value" id="stat-late">0</div>
+                    <div class="stat-label">Đi Muộn</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: var(--warning);">
+                        <i class="fas fa-calendar-day"></i>
+                    </div>
+                    <div class="stat-value" id="stat-leave">0</div>
+                    <div class="stat-label">Nghỉ Phép</div>
+                </div>
+            </div>
+
+            <div class="glass-card">
+                <h3 style="margin-bottom: 1.5rem;">Biểu Đồ Chấm Công Tuần</h3>
+                <canvas id="attendanceChart" height="100"></canvas>
+            </div>
+        </section>
+
+        <!-- Attendance Section -->
+        <section id="attendance" class="section animate-fade-in">
+            <div class="glass-card" style="max-width: 600px; margin: 0 auto;">
+                <h3 style="margin-bottom: 2rem; text-align: center;">Thực Hiện Chấm Công</h3>
+                <form id="attendance-form">
+                    <div class="form-group">
+                        <label>Chọn Nhân Viên</label>
+                        <select id="employee-select" required>
+                            <option value="">-- Chọn nhân viên --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Hành Động</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <button type="button" class="btn btn-primary" id="btn-checkin"
+                                style="background: var(--success);">
+                                <i class="fas fa-sign-in-alt"></i> Check In
+                            </button>
+                            <button type="button" class="btn btn-primary" id="btn-checkout"
+                                style="background: var(--danger);">
+                                <i class="fas fa-sign-out-alt"></i> Check Out
+                            </button>
+                        </div>
+                    </div>
+                    <div id="status-message" style="margin-top: 1rem; text-align: center; font-size: 0.9rem;"></div>
+                </form>
+                
+                <!-- Map Container -->
+                <div id="map-container" style="display: none; margin-top: 2rem; border-radius: 16px; overflow: hidden; border: 1px solid var(--glass-border);">
+                    <div id="map" style="height: 300px; width: 100%;"></div>
+                    <div id="location-info" style="padding: 1rem; background: var(--glass-bg); font-size: 0.8rem; color: var(--text-muted); text-align: center;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Reports Section -->
+        <section id="reports" class="section animate-fade-in">
+            <div class="glass-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h3>Lịch Sử Chấm Công</h3>
+                    <div style="display: flex; gap: 1rem;">
+                        <input type="date" id="report-date" style="width: auto;">
+                        <button class="btn btn-primary" id="btn-export">
+                            <i class="fas fa-file-export"></i> Xuất Excel
+                        </button>
+                    </div>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table id="attendance-table">
+                        <thead>
+                            <tr>
+                                <th>Nhân Viên</th>
+                                <th>Ngày</th>
+                                <th>Giờ vào</th>
+                                <th>Giờ ra</th>
+                                <th>Trạng Thái</th>
+                                <th>Ghi Chú</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendance-list">
+                            <!-- Data will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Settings Section -->
+        <section id="settings" class="section animate-fade-in">
+            <div class="glass-card" style="max-width: 600px; margin: 0 auto;">
+                <h3 style="margin-bottom: 2rem;">Cài Đặt Hệ Thống</h3>
+                <form id="settings-form">
+                    <div class="form-group">
+                        <label>Giờ Bắt Đầu Làm Việc (Threshold đi muộn)</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <select id="setting-start-hour" style="width: 80px;"></select> : 
+                            <select id="setting-start-minute" style="width: 80px;"></select>
+                        </div>
+                        <small style="color: var(--text-muted);">Nhân viên check-in sau giờ này sẽ bị tính là "Đi Muộn".</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Giờ Kết Thúc Làm Việc</label>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <select id="setting-end-hour" style="width: 80px;"></select> : 
+                            <select id="setting-end-minute" style="width: 80px;"></select>
+                        </div>
+                    </div>
+                    <div class="form-group" style="margin-top: 2rem;">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Lưu Cấu Hình
+                        </button>
+                    </div>
+                    <div id="settings-status" style="margin-top: 1rem; text-align: center; font-size: 0.9rem;"></div>
+                </form>
+            </div>
+        </section>
+
+    </main>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
