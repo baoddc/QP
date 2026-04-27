@@ -504,6 +504,25 @@ function setupSettingsForm() {
     const form = document.getElementById('settings-form');
     const status = document.getElementById('settings-status');
 
+    // Smart Paste logic for Latitude field
+    document.getElementById('setting-company-lat').addEventListener('input', (e) => {
+        const val = e.target.value.trim();
+        if (val.includes(',') || val.includes('\t') || (val.split(' ').length >= 2 && val.includes('°'))) {
+            let parts = [];
+            if (val.includes(',')) parts = val.split(',');
+            else if (val.includes('\t')) parts = val.split('\t');
+            else parts = val.split(/(?<=[NSEW])\s+/i);
+
+            if (parts.length >= 2) {
+                e.target.value = parts[0].trim();
+                document.getElementById('setting-company-lng').value = parts[1].trim();
+            }
+        }
+        updateDistancePreview();
+    });
+
+    document.getElementById('setting-company-lng').addEventListener('input', updateDistancePreview);
+
     form.addEventListener('submit', (e) => {
         e.preventDefault();
         const settings = {
@@ -632,5 +651,36 @@ function parseDMSToDecimal(dms) {
     } catch (e) {
         console.error('Error parsing DMS:', dms, e);
         return null;
+    }
+}
+
+/**
+ * Updates a live preview of distance in the settings panel
+ */
+async function updateDistancePreview() {
+    const latIn = document.getElementById('setting-company-lat').value;
+    const lngIn = document.getElementById('setting-company-lng').value;
+    const previewEl = document.getElementById('settings-distance-preview');
+    const metersEl = document.getElementById('preview-meters');
+
+    const companyLat = parseDMSToDecimal(latIn);
+    const companyLng = parseDMSToDecimal(lngIn);
+
+    if (companyLat !== null && companyLng !== null) {
+        try {
+            const position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+            });
+            const dist = getDistance(position.coords.latitude, position.coords.longitude, companyLat, companyLng);
+            const distText = dist > 1000 ? (dist / 1000).toFixed(2) + 'km' : Math.round(dist) + 'm';
+            
+            previewEl.style.display = 'block';
+            metersEl.textContent = distText;
+            metersEl.style.color = dist > 1000 ? 'var(--danger)' : 'var(--success)';
+        } catch (e) {
+            previewEl.style.display = 'none';
+        }
+    } else {
+        previewEl.style.display = 'none';
     }
 }
