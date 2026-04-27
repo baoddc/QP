@@ -210,13 +210,26 @@ async function handleAttendance(action) {
             const rawDistance = getDistance(lat, lng, companyLat, companyLng);
             const distance = Math.max(0, rawDistance - accuracy);
             
+            // Safety check: If distance calculation fails or is invalid
+            if (isNaN(distance)) {
+                alert('Lỗi: Không thể tính toán khoảng cách. Vui lòng kiểm tra tọa độ cài đặt!');
+                btnIn.disabled = false;
+                btnOut.disabled = false;
+                btnIn.innerHTML = originalInText;
+                btnOut.innerHTML = originalOutText;
+                return;
+            }
+
             const distanceInKm = rawDistance > 1000 ? (rawDistance / 1000).toFixed(2) + 'km' : Math.round(rawDistance) + 'm';
             distanceInfo = `(Cách công ty ${distanceInKm}) `;
 
+            // STRICT CHECK: Only allow if distance <= allowedRadius
             if (distance > allowedRadius) {
-                const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${lat},${lng}&destination=${companyLat},${companyLng}&travelmode=walking`;
-                showStatus(`Lỗi: Bạn ở quá xa (${distanceInKm}). Giới hạn: ${allowedRadius}m.`, 'danger');
+                const msg = `BỊ CHẶN: Bạn đang ở cách công ty ${distanceInKm}, vượt quá giới hạn cho phép ${allowedRadius}m.`;
+                alert(msg);
+                showStatus(msg, 'danger');
                 
+                const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${lat},${lng}&destination=${companyLat},${companyLng}&travelmode=walking`;
                 const statusEl = document.getElementById('status-message');
                 statusEl.innerHTML += `<br><a href="${googleMapsUrl}" target="_blank" style="color: var(--primary); text-decoration: underline; font-size: 0.8rem;">[Kiểm tra trên Google Maps]</a>`;
                 
@@ -227,8 +240,7 @@ async function handleAttendance(action) {
                 return;
             }
         } else if (settings.companyLat || settings.companyLng) {
-            // If one of them is set but parsing failed
-            showStatus('Lỗi: Cấu hình tọa độ công ty không hợp lệ!', 'danger');
+            alert('Lỗi: Tọa độ công ty trong phần Cài đặt không hợp lệ!');
             btnIn.disabled = false;
             btnOut.disabled = false;
             btnIn.innerHTML = originalInText;
