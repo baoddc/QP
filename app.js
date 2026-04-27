@@ -213,7 +213,7 @@ async function handleAttendance(action) {
 
                 if (distance > allowedRadius) {
                     const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${lat},${lng}&destination=${companyLat},${companyLng}&travelmode=walking`;
-                    showStatus(`Lỗi: Bạn đang ở quá xa (${Math.round(rawDistance)}m). Giới hạn: ${allowedRadius}m.`, 'danger');
+                    showStatus(`Lỗi: Bạn đang ở cách công ty ${Math.round(rawDistance)}m (Vượt quá giới hạn ${allowedRadius}m). Sai số GPS: +/-${Math.round(accuracy)}m`, 'danger');
                     
                     // Add a temporary link to verify on Google Maps
                     const statusEl = document.getElementById('status-message');
@@ -225,13 +225,15 @@ async function handleAttendance(action) {
                     btnOut.innerHTML = originalOutText;
                     return;
                 }
+                // Success distance message
+                address = `(Cách công ty ${Math.round(rawDistance)}m) ` + (address || '');
             }
         }
         
         try {
             const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
             const geoData = await geoRes.json();
-            address = geoData.display_name;
+            address = `(Cách công ty ${Math.round(getDistance(lat, lng, parseDMSToDecimal(settings.companyLat), parseDMSToDecimal(settings.companyLng)))}m) ` + geoData.display_name;
         } catch (e) { console.error('Address lookup failed', e); }
 
     } catch (error) {
@@ -246,7 +248,7 @@ async function handleAttendance(action) {
 
     if (SCRIPT_URL === 'YOUR_GOOGLE_SCRIPT_WEB_APP_URL') {
         setTimeout(() => {
-            showStatus(`${action === 'checkin' ? 'Check-in' : 'Check-out'} thành công (Demo Mode)`, 'success');
+            showStatus(`${action === 'checkin' ? 'Check-in' : 'Check-out'} thành công! ${address}`, 'success');
             btnIn.disabled = false;
             btnOut.disabled = false;
             btnIn.innerHTML = originalInText;
@@ -271,7 +273,7 @@ async function handleAttendance(action) {
         const result = await res.json();
 
         if (result.success) {
-            showStatus(result.message, 'success');
+            showStatus(`${result.message} ${address}`, 'success');
             if (lat && lng) showMap(lat, lng, accuracy, address, empName);
             setTimeout(() => loadData(), 1000);
         } else {
