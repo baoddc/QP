@@ -503,9 +503,15 @@ function setupSettingsForm() {
             const position = await new Promise((resolve, reject) => {
                 navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true });
             });
-            document.getElementById('setting-company-lat').value = position.coords.latitude;
-            document.getElementById('setting-company-lng').value = position.coords.longitude;
-            alert('Đã lấy tọa độ hiện tại thành công!');
+            
+            // Convert to DMS format before filling
+            const dmsLat = toDMS(position.coords.latitude, true);
+            const dmsLng = toDMS(position.coords.longitude, false);
+            
+            document.getElementById('setting-company-lat').value = dmsLat;
+            document.getElementById('setting-company-lng').value = dmsLng;
+            
+            alert('Đã lấy tọa độ hiện tại và chuyển sang định dạng DMS thành công!');
         } catch (error) {
             alert('Không thể lấy vị trí. Vui lòng kiểm tra quyền truy cập GPS!');
         } finally {
@@ -513,6 +519,27 @@ function setupSettingsForm() {
             btn.innerHTML = originalText;
         }
     });
+}
+
+/**
+ * Converts Decimal Degrees to DMS format
+ */
+function toDMS(coord, isLat) {
+    if (coord === null || coord === undefined || coord === '') return '';
+    const val = parseFloat(coord);
+    if (isNaN(val)) return coord;
+
+    const absolute = Math.abs(val);
+    const degrees = Math.floor(absolute);
+    const minutesNotTruncated = (absolute - degrees) * 60;
+    const minutes = Math.floor(minutesNotTruncated);
+    const seconds = ((minutesNotTruncated - minutes) * 60).toFixed(1);
+    
+    const direction = isLat 
+        ? (val >= 0 ? 'N' : 'S') 
+        : (val >= 0 ? 'E' : 'W');
+        
+    return degrees + '°' + minutes + "'" + seconds + '"' + direction;
 }
 
 /**
