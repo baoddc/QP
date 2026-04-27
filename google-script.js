@@ -135,7 +135,7 @@ function checkIn(id, name, configStartTime, lat, lng) {
   }
   
   // Columns: A:ID, B:Name, C:Date, D:CheckIn, E:CheckOut, F:Status, G:Note, H:Lat, I:Lng
-  ATTENDANCE_SHEET.appendRow([id, name, date, time, '', status, '', lat || '', lng || '']);
+  ATTENDANCE_SHEET.appendRow([id, name, date, time, '', status, '', toDMS(lat, true), toDMS(lng, false)]);
   
   const lastRow = ATTENDANCE_SHEET.getLastRow();
   ATTENDANCE_SHEET.getRange(lastRow, 4).setNumberFormat('HH:mm:ss');
@@ -165,8 +165,8 @@ function checkOut(id, lat, lng) {
         checkoutCell.setNumberFormat('HH:mm:ss');
         
         // Update Check-out Coordinates (Columns J:10 and K:11)
-        if (lat) ATTENDANCE_SHEET.getRange(i + 1, 10).setValue(lat);
-        if (lng) ATTENDANCE_SHEET.getRange(i + 1, 11).setValue(lng);
+        if (lat) ATTENDANCE_SHEET.getRange(i + 1, 10).setValue(toDMS(lat, true));
+        if (lng) ATTENDANCE_SHEET.getRange(i + 1, 11).setValue(toDMS(lng, false));
         
         return contentResponse({ success: true, message: 'Check-out thành công!' });
       }
@@ -179,4 +179,26 @@ function checkOut(id, lat, lng) {
 function contentResponse(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Converts Decimal Degrees to DMS format (Degrees, Minutes, Seconds)
+ * Example: 10.8202 -> 10°49'12.7"N
+ */
+function toDMS(coord, isLat) {
+  if (coord === null || coord === undefined || coord === '') return '';
+  const val = parseFloat(coord);
+  if (isNaN(val)) return coord;
+
+  const absolute = Math.abs(val);
+  const degrees = Math.floor(absolute);
+  const minutesNotTruncated = (absolute - degrees) * 60;
+  const minutes = Math.floor(minutesNotTruncated);
+  const seconds = ((minutesNotTruncated - minutes) * 60).toFixed(1);
+  
+  const direction = isLat 
+    ? (val >= 0 ? 'N' : 'S') 
+    : (val >= 0 ? 'E' : 'W');
+    
+  return degrees + '°' + minutes + "'" + seconds + '"' + direction;
 }

@@ -124,11 +124,11 @@ function renderAttendanceTable() {
         const tr = document.createElement('tr');
         const statusClass = record.status === 'Late' ? 'status-out' : 'status-in';
 
-        // Check for coordinates (supporting old and new header names)
-        const lat = record.checkin_lat || record.latitude || record.lat;
-        const lng = record.checkin_lng || record.longitude || record.lng;
-        const outLat = record.checkout_lat;
-        const outLng = record.checkout_lng;
+        // Check for coordinates (supporting old and new header names, and DMS format)
+        const lat = parseDMSToDecimal(record.checkin_lat || record.latitude || record.lat);
+        const lng = parseDMSToDecimal(record.checkin_lng || record.longitude || record.lng);
+        const outLat = parseDMSToDecimal(record.checkout_lat);
+        const outLng = parseDMSToDecimal(record.checkout_lng);
 
         let locationHtml = '-';
         if (lat && lng) {
@@ -197,6 +197,27 @@ async function handleAttendance(action) {
         lat = position.coords.latitude;
         lng = position.coords.longitude;
         accuracy = position.coords.accuracy;
+
+        // Geofencing Check
+        const settings = JSON.parse(localStorage.getItem('attendanceSettings')) || {};
+        if (settings.companyLat && settings.companyLng) {
+            const companyLat = parseDMSToDecimal(settings.companyLat);
+            const companyLng = parseDMSToDecimal(settings.companyLng);
+            
+            if (companyLat !== null && companyLng !== null) {
+                const distance = getDistance(lat, lng, companyLat, companyLng);
+                const allowedRadius = parseFloat(settings.companyRadius) || 200;
+
+                if (distance > allowedRadius) {
+                    showStatus(`Lỗi: Bạn đang ở quá xa công ty (${Math.round(distance)}m). Khoảng cách tối đa: ${allowedRadius}m`, 'danger');
+                    btnIn.disabled = false;
+                    btnOut.disabled = false;
+                    btnIn.innerHTML = originalInText;
+                    btnOut.innerHTML = originalOutText;
+                    return;
+                }
+            }
+        }
         
         try {
             const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
@@ -206,7 +227,12 @@ async function handleAttendance(action) {
 
     } catch (error) {
         console.warn('Geolocation failed:', error);
-        showStatus('Không thể lấy vị trí chính xác. Vui lòng bật GPS.', 'warning');
+        showStatus('Không thể lấy vị trí chính xác. Vui lòng bật GPS để chấm công!', 'danger');
+        btnIn.disabled = false;
+        btnOut.disabled = false;
+        btnIn.innerHTML = originalInText;
+        btnOut.innerHTML = originalOutText;
+        return;
     }
 
     if (SCRIPT_URL === 'YOUR_GOOGLE_SCRIPT_WEB_APP_URL') {
@@ -341,15 +367,26 @@ function showMap(lat, lng, accuracy, addr, name) {
 
 // Settings Management
 function loadSettings() {
-    const settings = JSON.parse(localStorage.getItem('attendanceSettings')) || { startTime: '08:30', endTime: '17:30' };
+    const settings = JSON.parse(localStorage.getItem('attendanceSettings')) || { 
+        startTime: '08:30', 
+        endTime: '17:30',
+        companyLat: '',
+        companyLng: '',
+        companyRadius: '200'
+    };
     
-    const [startH, startM] = settings.startTime.split(':');
-    const [endH, endM] = settings.endTime.split(':');
+    const [startH, startM] = (settings.startTime || '08:30').split(':');
+    const [endH, endM] = (settings.endTime || '17:30').split(':');
     
     document.getElementById('setting-start-hour').value = startH;
     document.getElementById('setting-start-minute').value = startM;
     document.getElementById('setting-end-hour').value = endH;
     document.getElementById('setting-end-minute').value = endM;
+
+    // Load company location
+    document.getElementById('setting-company-lat').value = settings.companyLat || '';
+    document.getElementById('setting-company-lng').value = settings.companyLng || '';
+    document.getElementById('setting-company-radius').value = settings.companyRadius || '200';
 }
 
 function populateTimeSelects() {
@@ -405,10 +442,10 @@ function renderHistoryMap() {
 
     const bounds = [];
     attendanceData.forEach(record => {
-        const lat = parseFloat(record.checkin_lat || record.latitude || record.lat);
-        const lng = parseFloat(record.checkin_lng || record.longitude || record.lng);
+        const lat = parseDMSToDecimal(record.checkin_lat || record.latitude || record.lat);
+        const lng = parseDMSToDecimal(record.checkin_lng || record.longitude || record.lng);
         
-        if (!isNaN(lat) && !isNaN(lng)) {
+        if (!isNaN(lat) && !isNaN(lng) && lat !== null && lng !== null) {
             const m = L.marker([lat, lng])
                 .bindPopup(`<b>${record.name}</b><br>Giờ vào: ${record.checkin || '-'}<br>Ngày: ${record.date}`)
                 .addTo(historyMap);
@@ -432,7 +469,10 @@ function setupSettingsForm() {
         e.preventDefault();
         const settings = {
             startTime: `${document.getElementById('setting-start-hour').value}:${document.getElementById('setting-start-minute').value}`,
-            endTime: `${document.getElementById('setting-end-hour').value}:${document.getElementById('setting-end-minute').value}`
+            endTime: `${document.getElementById('setting-end-hour').value}:${document.getElementById('setting-end-minute').value}`,
+            companyLat: document.getElementById('setting-company-lat').value,
+            companyLng: document.getElementById('setting-company-lng').value,
+            companyRadius: document.getElementById('setting-company-radius').value
         };
         localStorage.setItem('attendanceSettings', JSON.stringify(settings));
         
@@ -440,4 +480,58 @@ function setupSettingsForm() {
         status.style.color = 'var(--success)';
         setTimeout(() => { status.textContent = ''; }, 3000);
     });
+}
+
+/**
+ * Calculates distance between two points in meters using Haversine formula
+ */
+function getDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3; // Earth radius in meters
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // in meters
+}
+
+/**
+ * Parses DMS coordinate string (e.g., 10°49'12.7"N) back to Decimal Degrees
+ */
+function parseDMSToDecimal(dms) {
+    if (!dms) return null;
+    if (typeof dms === 'number') return dms;
+    
+    // If it's already a decimal string, parse it
+    if (!isNaN(parseFloat(dms)) && !dms.toString().includes('°')) {
+        return parseFloat(dms);
+    }
+
+    try {
+        const regex = /(\d+)°(\d+)'([\d.]+)"([NSEW])/;
+        const parts = dms.match(regex);
+        
+        if (!parts) return parseFloat(dms) || null;
+
+        const degrees = parseFloat(parts[1]);
+        const minutes = parseFloat(parts[2]);
+        const seconds = parseFloat(parts[3]);
+        const direction = parts[4];
+
+        let dd = degrees + minutes / 60 + seconds / 3600;
+
+        if (direction === 'S' || direction === 'W') {
+            dd = dd * -1;
+        }
+
+        return dd;
+    } catch (e) {
+        console.error('Error parsing DMS:', dms, e);
+        return parseFloat(dms) || null;
+    }
 }
