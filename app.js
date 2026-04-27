@@ -200,55 +200,49 @@ async function handleAttendance(action) {
 
         // Geofencing Check
         const settings = JSON.parse(localStorage.getItem('attendanceSettings')) || {};
-        console.log('Geofencing check starting...', settings);
+        const companyLat = parseDMSToDecimal(settings.companyLat);
+        const companyLng = parseDMSToDecimal(settings.companyLng);
+        const allowedRadius = parseFloat(settings.companyRadius) || 200;
+        
+        let distanceInfo = '';
 
-        if (settings.companyLat && settings.companyLng) {
-            const companyLat = parseDMSToDecimal(settings.companyLat);
-            const companyLng = parseDMSToDecimal(settings.companyLng);
+        if (companyLat !== null && companyLng !== null) {
+            const rawDistance = getDistance(lat, lng, companyLat, companyLng);
+            const distance = Math.max(0, rawDistance - accuracy);
             
-            console.log(`Parsed Coordinates: User(${lat}, ${lng}), Company(${companyLat}, ${companyLng})`);
+            const distanceInKm = rawDistance > 1000 ? (rawDistance / 1000).toFixed(2) + 'km' : Math.round(rawDistance) + 'm';
+            distanceInfo = `(Cách công ty ${distanceInKm}) `;
 
-            if (companyLat !== null && companyLng !== null) {
-                const rawDistance = getDistance(lat, lng, companyLat, companyLng);
-                const allowedRadius = parseFloat(settings.companyRadius) || 200;
-                const distance = Math.max(0, rawDistance - accuracy);
-
-                console.log(`Distance: ${rawDistance}m, Allowed: ${allowedRadius}m`);
-
-                if (distance > allowedRadius) {
-                    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${lat},${lng}&destination=${companyLat},${companyLng}&travelmode=walking`;
-                    showStatus(`Lỗi: Bạn đang ở cách công ty ${Math.round(rawDistance)}m (Giới hạn ${allowedRadius}m).`, 'danger');
-                    
-                    const statusEl = document.getElementById('status-message');
-                    statusEl.innerHTML += `<br><a href="${googleMapsUrl}" target="_blank" style="color: var(--primary); text-decoration: underline; font-size: 0.8rem;">[Bấm vào đây để kiểm tra trên Google Maps]</a>`;
-                    
-                    btnIn.disabled = false;
-                    btnOut.disabled = false;
-                    btnIn.innerHTML = originalInText;
-                    btnOut.innerHTML = originalOutText;
-                    return;
-                }
-                // Success distance message
-                const distanceStr = `<strong style="color: var(--primary);">${Math.round(rawDistance)}m</strong>`;
-                address = `(Cách công ty ${distanceStr}) `;
-            } else {
-                console.error('Invalid company coordinates in settings!');
-                showStatus('Lỗi: Cấu hình tọa độ công ty không hợp lệ. Vui lòng kiểm tra lại phần Cài đặt!', 'danger');
+            if (distance > allowedRadius) {
+                const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${lat},${lng}&destination=${companyLat},${companyLng}&travelmode=walking`;
+                showStatus(`Lỗi: Bạn ở quá xa (${distanceInKm}). Giới hạn: ${allowedRadius}m.`, 'danger');
+                
+                const statusEl = document.getElementById('status-message');
+                statusEl.innerHTML += `<br><a href="${googleMapsUrl}" target="_blank" style="color: var(--primary); text-decoration: underline; font-size: 0.8rem;">[Kiểm tra trên Google Maps]</a>`;
+                
                 btnIn.disabled = false;
                 btnOut.disabled = false;
                 btnIn.innerHTML = originalInText;
                 btnOut.innerHTML = originalOutText;
                 return;
             }
+        } else if (settings.companyLat || settings.companyLng) {
+            // If one of them is set but parsing failed
+            showStatus('Lỗi: Cấu hình tọa độ công ty không hợp lệ!', 'danger');
+            btnIn.disabled = false;
+            btnOut.disabled = false;
+            btnIn.innerHTML = originalInText;
+            btnOut.innerHTML = originalOutText;
+            return;
         }
         
         try {
             const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
             const geoData = await geoRes.json();
-            address += geoData.display_name;
+            address = distanceInfo + geoData.display_name;
         } catch (e) { 
             console.error('Address lookup failed', e);
-            address += 'Không xác định được địa chỉ';
+            address = distanceInfo + 'Không xác định được địa chỉ';
         }
 
     } catch (error) {
@@ -365,14 +359,17 @@ function showMap(lat, lng, accuracy, addr, name) {
     const container = document.getElementById('map-container');
     const info = document.getElementById('location-info');
     container.style.display = 'block';
+    const distMatch = addr.match(/\(Cách công ty (.*?)\)/);
+    const distText = distMatch ? distMatch[1] : '---';
+
     info.innerHTML = `
         <div style="font-weight: 600; color: var(--text-main); margin-bottom: 5px;">Nhân viên: <span style="color: var(--primary);">${name}</span></div>
         <div style="font-weight: 600; color: var(--text-main); margin-bottom: 8px;">
             <i class="fas fa-route"></i> Khoảng cách đến công ty: 
-            <span style="color: var(--success); font-size: 1.1rem;">${addr.match(/<strong>(.*?)<\/strong>/)?.[1] || '---'}</span>
+            <span style="color: var(--success); font-size: 1.1rem;">${distText}</span>
         </div>
         <div style="font-weight: 600; color: var(--text-main); margin-bottom: 5px;">Địa chỉ thực tế:</div>
-        <div style="margin-bottom: 8px;">${addr.replace(/<.*?>/g, '').replace(/\(Cách công ty .*?\)/, '') || 'Không xác định được địa chỉ'}</div>
+        <div style="margin-bottom: 8px;">${addr.replace(/\(Cách công ty .*?\)/, '') || 'Không xác định được địa chỉ'}</div>
         <div style="font-size: 0.75rem; color: ${accuracy > 100 ? 'var(--danger)' : 'var(--success)'};">
             <i class="fas fa-crosshairs"></i> Độ chính xác GPS: +/- ${Math.round(accuracy)} mét
         </div>
