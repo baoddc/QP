@@ -200,12 +200,17 @@
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
                             <div>
                                 <label style="font-size: 0.8rem;">Vĩ độ (Latitude)</label>
-                                <input type="text" id="setting-company-lat" placeholder="VD: 10.762622 hoặc 10°45'45.4\"N">
+                                <input type="text" id="setting-company-lat" placeholder="VD: 10.762622">
                             </div>
                             <div>
                                 <label style="font-size: 0.8rem;">Kinh độ (Longitude)</label>
-                                <input type="text" id="setting-company-lng" placeholder="VD: 106.660172 hoặc 106°39'36.6\"E">
+                                <input type="text" id="setting-company-lng" placeholder="VD: 106.660172">
                             </div>
+                        </div>
+                        <div style="margin-top: 0.5rem; text-align: right;">
+                            <button type="button" class="btn btn-primary" id="btn-get-current-loc" style="padding: 5px 10px; font-size: 0.75rem; background: var(--warning);">
+                                <i class="fas fa-crosshairs"></i> Lấy vị trí hiện tại làm vị trí công ty
+                            </button>
                         </div>
                         <div style="margin-top: 1rem;">
                             <label style="font-size: 0.8rem;">Bán kính cho phép (Mét)</label>

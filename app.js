@@ -483,6 +483,28 @@ function setupSettingsForm() {
         status.style.color = 'var(--success)';
         setTimeout(() => { status.textContent = ''; }, 3000);
     });
+
+    // Get current location button
+    document.getElementById('btn-get-current-loc').addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang lấy vị trí...';
+        
+        try {
+            const position = await new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true });
+            });
+            document.getElementById('setting-company-lat').value = position.coords.latitude;
+            document.getElementById('setting-company-lng').value = position.coords.longitude;
+            alert('Đã lấy tọa độ hiện tại thành công!');
+        } catch (error) {
+            alert('Không thể lấy vị trí. Vui lòng kiểm tra quyền truy cập GPS!');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    });
 }
 
 /**
@@ -513,7 +535,8 @@ function parseDMSToDecimal(dms) {
     if (!dms) return null;
     if (typeof dms === 'number') return dms;
     
-    const str = dms.toString().trim();
+    // Convert comma to dot for Vietnamese locale support
+    const str = dms.toString().trim().replace(',', '.');
     
     // If it's already a decimal string, parse it
     if (!isNaN(parseFloat(str)) && !str.includes('°')) {
