@@ -212,7 +212,13 @@ async function handleAttendance(action) {
                 const distance = Math.max(0, rawDistance - accuracy);
 
                 if (distance > allowedRadius) {
-                    showStatus(`Lỗi: Bạn đang ở quá xa (${Math.round(rawDistance)}m). Sai số GPS: +/-${Math.round(accuracy)}m. Khoảng cách sau khi trừ sai số: ${Math.round(distance)}m. Giới hạn: ${allowedRadius}m`, 'danger');
+                    const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${lat},${lng}&destination=${companyLat},${companyLng}&travelmode=walking`;
+                    showStatus(`Lỗi: Bạn đang ở quá xa (${Math.round(rawDistance)}m). Giới hạn: ${allowedRadius}m.`, 'danger');
+                    
+                    // Add a temporary link to verify on Google Maps
+                    const statusEl = document.getElementById('status-message');
+                    statusEl.innerHTML += `<br><a href="${googleMapsUrl}" target="_blank" style="color: var(--primary); text-decoration: underline; font-size: 0.8rem;">[Bấm vào đây để kiểm tra trên Google Maps]</a>`;
+                    
                     btnIn.disabled = false;
                     btnOut.disabled = false;
                     btnIn.innerHTML = originalInText;
@@ -511,7 +517,7 @@ function setupSettingsForm() {
  * Calculates distance between two points in meters using Haversine formula
  */
 function getDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // Earth radius in meters
+    const R = 6378137; // Earth radius in meters (WGS84 standard)
     const φ1 = lat1 * Math.PI / 180;
     const φ2 = lat2 * Math.PI / 180;
     const Δφ = (lat2 - lat1) * Math.PI / 180;
