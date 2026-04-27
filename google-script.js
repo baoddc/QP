@@ -14,6 +14,7 @@
 const SS = SpreadsheetApp.getActiveSpreadsheet();
 const ATTENDANCE_SHEET = SS.getSheetByName('Attendance');
 const EMPLOYEE_SHEET = SS.getSheetByName('Employees');
+const SETTINGS_SHEET = SS.getSheetByName('Settings');
 
 function doGet(e) {
   const action = e.parameter.action;
@@ -81,6 +82,10 @@ function doGet(e) {
       leave: 0 
     });
   }
+
+  if (action === 'getSettings') {
+    return contentResponse(getSettings());
+  }
   
   if (action === 'checkin') {
     return checkIn(e.parameter.employeeId, e.parameter.employeeName, e.parameter.configStartTime, e.parameter.lat, e.parameter.lng);
@@ -102,6 +107,42 @@ function doPost(e) {
   if (action === 'checkout') {
     return checkOut(data.employeeId, data.lat, data.lng);
   }
+
+  if (action === 'updateSettings') {
+    return updateSettings(data.settings);
+  }
+}
+
+function getSettings() {
+  if (!SETTINGS_SHEET) return {};
+  const data = SETTINGS_SHEET.getDataRange().getValues();
+  let settings = {};
+  data.forEach((row, i) => {
+    if (i === 0) return; // Skip headers
+    if (row[0]) settings[row[0]] = row[1];
+  });
+  return settings;
+}
+
+function updateSettings(settings) {
+  if (!SETTINGS_SHEET) return contentResponse({ success: false, message: 'Sheet "Settings" không tồn tại!' });
+  
+  const data = SETTINGS_SHEET.getDataRange().getValues();
+  const keys = data.map(row => row[0]);
+  
+  for (let key in settings) {
+    const value = settings[key];
+    const index = keys.indexOf(key);
+    
+    if (index !== -1) {
+      SETTINGS_SHEET.getRange(index + 1, 2).setValue(value);
+    } else {
+      SETTINGS_SHEET.appendRow([key, value]);
+      keys.push(key);
+    }
+  }
+  
+  return contentResponse({ success: true, message: 'Cài đặt đã được cập nhật!' });
 }
 
 function checkIn(id, name, configStartTime, lat, lng) {

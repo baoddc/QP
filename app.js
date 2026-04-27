@@ -81,19 +81,27 @@ function switchSection(sectionId) {
 // API Calls
 async function loadData() {
     try {
-        const [empRes, statsRes, attRes] = await Promise.all([
+        const [empRes, statsRes, attRes, setRes] = await Promise.all([
             fetch(`${SCRIPT_URL}?action=getEmployees`),
             fetch(`${SCRIPT_URL}?action=getStats`),
-            fetch(`${SCRIPT_URL}?action=getAttendance`)
+            fetch(`${SCRIPT_URL}?action=getAttendance`),
+            fetch(`${SCRIPT_URL}?action=getSettings`)
         ]);
 
         employees = await empRes.json();
         const stats = await statsRes.json();
         attendanceData = await attRes.json();
+        const serverSettings = await setRes.json();
 
         updateStats(stats);
         populateEmployees();
         renderAttendanceTable();
+        
+        // Sync server settings to localStorage and UI
+        if (serverSettings && Object.keys(serverSettings).length > 0) {
+            localStorage.setItem('attendanceSettings', JSON.stringify(serverSettings));
+            loadSettings(); // Refresh UI with new settings
+        }
     } catch (error) {
         console.error('Error loading data:', error);
         showStatus('Lỗi kết nối server!', 'danger');
@@ -543,7 +551,7 @@ function setupSettingsForm() {
 
     document.getElementById('setting-company-lng').addEventListener('input', updateDistancePreview);
 
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const settings = {
             startTime: `${document.getElementById('setting-start-hour').value}:${document.getElementById('setting-start-minute').value}`,
@@ -552,10 +560,37 @@ function setupSettingsForm() {
             companyLng: document.getElementById('setting-company-lng').value,
             companyRadius: document.getElementById('setting-company-radius').value
         };
+
+        // Save to localStorage immediately for UI feedback
         localStorage.setItem('attendanceSettings', JSON.stringify(settings));
         
-        status.textContent = 'Cấu hình đã được lưu!';
-        status.style.color = 'var(--success)';
+        status.textContent = 'Đang đồng bộ với máy chủ...';
+        status.style.color = 'var(--primary)';
+
+        try {
+            const res = await fetch(`${SCRIPT_URL}`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: 'updateSettings',
+                    settings: settings
+                })
+            });
+            const result = await res.json();
+
+            if (result.success) {
+                status.textContent = 'Cấu hình đã được lưu và đồng bộ!';
+                status.style.color = 'var(--success)';
+            } else {
+                status.textContent = 'Lỗi đồng bộ: ' + result.message;
+                status.style.color = 'var(--danger)';
+            }
+        } catch (err) {
+            console.error('Sync error:', err);
+            // Even if sync fails, it's already in localStorage
+            status.textContent = 'Đã lưu cục bộ, nhưng không thể đồng bộ với máy chủ!';
+            status.style.color = 'var(--warning)';
+        }
+        
         setTimeout(() => { status.textContent = ''; }, 3000);
     });
 
