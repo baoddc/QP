@@ -125,10 +125,10 @@ function renderAttendanceTable() {
         const statusClass = record.status === 'Late' ? 'status-out' : 'status-in';
 
         // Check for coordinates (supporting old and new header names, and DMS format)
-        const lat = parseDMSToDecimal(record.checkin_lat || record.latitude || record.lat);
-        const lng = parseDMSToDecimal(record.checkin_lng || record.longitude || record.lng);
-        const outLat = parseDMSToDecimal(record.checkout_lat);
-        const outLng = parseDMSToDecimal(record.checkout_lng);
+        const lat = parseDMSToDecimal(record.checkin_lat || record.latitude || record.lat, true);
+        const lng = parseDMSToDecimal(record.checkin_lng || record.longitude || record.lng, false);
+        const outLat = parseDMSToDecimal(record.checkout_lat, true);
+        const outLng = parseDMSToDecimal(record.checkout_lng, false);
 
         let locationHtml = '-';
         if (lat && lng) {
@@ -200,8 +200,8 @@ async function handleAttendance(action) {
 
         // Geofencing Check
         const settings = JSON.parse(localStorage.getItem('attendanceSettings')) || {};
-        const companyLat = parseDMSToDecimal(settings.companyLat);
-        const companyLng = parseDMSToDecimal(settings.companyLng);
+        const companyLat = parseDMSToDecimal(settings.companyLat, true);
+        const companyLng = parseDMSToDecimal(settings.companyLng, false);
         const allowedRadius = parseFloat(settings.companyRadius) || 200;
         
         console.log(`Location: ${lat},${lng} (accuracy: ${accuracy}m)`);
@@ -486,8 +486,8 @@ function renderHistoryMap() {
 
     const bounds = [];
     attendanceData.forEach(record => {
-        const lat = parseDMSToDecimal(record.checkin_lat || record.latitude || record.lat);
-        const lng = parseDMSToDecimal(record.checkin_lng || record.longitude || record.lng);
+        const lat = parseDMSToDecimal(record.checkin_lat || record.latitude || record.lat, true);
+        const lng = parseDMSToDecimal(record.checkin_lng || record.longitude || record.lng, false);
         
         if (!isNaN(lat) && !isNaN(lng) && lat !== null && lng !== null) {
             const m = L.marker([lat, lng])
@@ -511,7 +511,22 @@ function setupSettingsForm() {
 
     // Smart Paste logic for Latitude field
     document.getElementById('setting-company-lat').addEventListener('input', (e) => {
-        const val = e.target.value.trim();
+        let val = e.target.value.trim();
+        
+        // Handle Plus Code (Global Code)
+        if (typeof OpenLocationCode !== 'undefined' && OpenLocationCode.isFull(val)) {
+            try {
+                const decoded = OpenLocationCode.decode(val);
+                // Convert to DMS format for consistency in the UI
+                e.target.value = toDMS(decoded.latitudeCenter, true);
+                document.getElementById('setting-company-lng').value = toDMS(decoded.longitudeCenter, false);
+                updateDistancePreview();
+                return;
+            } catch (err) {
+                console.error('Plus Code decode failed', err);
+            }
+        }
+
         if (val.includes(',') || val.includes('\t') || (val.split(' ').length >= 2 && val.includes('°'))) {
             let parts = [];
             if (val.includes(',')) parts = val.split(',');
@@ -628,7 +643,7 @@ function getDistance(lat1, lon1, lat2, lon2) {
 /**
  * Parses DMS coordinate string (e.g., 10°49'12.7"N) back to Decimal Degrees
  */
-function parseDMSToDecimal(dms) {
+function parseDMSToDecimal(dms, isLat) {
     if (dms === null || dms === undefined || dms === '') return null;
     if (typeof dms === 'number') return dms;
     
@@ -638,6 +653,16 @@ function parseDMSToDecimal(dms) {
         .replace(/[′’]/g, "'") // Prime symbols
         .replace(/[″”]/g, '"') // Double prime symbols
         .replace(/[°dD]/g, '°'); // Degree symbols
+
+    // Handle Plus Code (Global Code)
+    if (typeof OpenLocationCode !== 'undefined' && OpenLocationCode.isFull(str)) {
+        try {
+            const decoded = OpenLocationCode.decode(str);
+            return isLat ? decoded.latitudeCenter : decoded.longitudeCenter;
+        } catch (e) {
+            console.warn('Invalid Plus Code:', str);
+        }
+    }
 
     // If it's already a decimal string, parse it
     if (!isNaN(parseFloat(str)) && !str.includes('°')) {
@@ -692,8 +717,8 @@ async function updateDistancePreview() {
     const previewEl = document.getElementById('settings-distance-preview');
     const metersEl = document.getElementById('preview-meters');
 
-    const companyLat = parseDMSToDecimal(latIn);
-    const companyLng = parseDMSToDecimal(lngIn);
+    const companyLat = parseDMSToDecimal(latIn, true);
+    const companyLng = parseDMSToDecimal(lngIn, false);
 
     if (companyLat !== null && companyLng !== null) {
         try {
