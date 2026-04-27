@@ -205,11 +205,14 @@ async function handleAttendance(action) {
             const companyLng = parseDMSToDecimal(settings.companyLng);
             
             if (companyLat !== null && companyLng !== null) {
-                const distance = getDistance(lat, lng, companyLat, companyLng);
+                const rawDistance = getDistance(lat, lng, companyLat, companyLng);
                 const allowedRadius = parseFloat(settings.companyRadius) || 200;
+                
+                // Subtract accuracy to be more lenient (Common geofencing practice)
+                const distance = Math.max(0, rawDistance - accuracy);
 
                 if (distance > allowedRadius) {
-                    showStatus(`Lỗi: Bạn đang ở quá xa công ty (${Math.round(distance)}m). Khoảng cách tối đa: ${allowedRadius}m`, 'danger');
+                    showStatus(`Lỗi: Bạn đang ở quá xa (${Math.round(rawDistance)}m). Sai số GPS: +/-${Math.round(accuracy)}m. Khoảng cách sau khi trừ sai số: ${Math.round(distance)}m. Giới hạn: ${allowedRadius}m`, 'danger');
                     btnIn.disabled = false;
                     btnOut.disabled = false;
                     btnIn.innerHTML = originalInText;
@@ -503,25 +506,35 @@ function getDistance(lat1, lon1, lat2, lon2) {
 /**
  * Parses DMS coordinate string (e.g., 10°49'12.7"N) back to Decimal Degrees
  */
+/**
+ * Parses DMS coordinate string (e.g., 10°49'12.7"N) back to Decimal Degrees
+ */
 function parseDMSToDecimal(dms) {
     if (!dms) return null;
     if (typeof dms === 'number') return dms;
     
+    const str = dms.toString().trim();
+    
     // If it's already a decimal string, parse it
-    if (!isNaN(parseFloat(dms)) && !dms.toString().includes('°')) {
-        return parseFloat(dms);
+    if (!isNaN(parseFloat(str)) && !str.includes('°')) {
+        return parseFloat(str);
     }
 
     try {
-        const regex = /(\d+)°(\d+)'([\d.]+)"([NSEW])/;
-        const parts = dms.match(regex);
+        // Robust regex to handle spaces and different formats
+        // Matches: 10°45'45.4"N, 10° 45' 45.4" N, etc.
+        const regex = /(\d+)\s*°\s*(\d+)\s*'\s*([\d.]+)\s*"\s*([NSEW])/i;
+        const parts = str.match(regex);
         
-        if (!parts) return parseFloat(dms) || null;
+        if (!parts) {
+            const val = parseFloat(str);
+            return isNaN(val) ? null : val;
+        }
 
         const degrees = parseFloat(parts[1]);
         const minutes = parseFloat(parts[2]);
         const seconds = parseFloat(parts[3]);
-        const direction = parts[4];
+        const direction = parts[4].toUpperCase();
 
         let dd = degrees + minutes / 60 + seconds / 3600;
 
@@ -532,6 +545,6 @@ function parseDMSToDecimal(dms) {
         return dd;
     } catch (e) {
         console.error('Error parsing DMS:', dms, e);
-        return parseFloat(dms) || null;
+        return null;
     }
 }
